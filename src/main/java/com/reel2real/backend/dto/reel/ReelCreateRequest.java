@@ -1,0 +1,20 @@
+package com.reel2real.backend.dto.reel;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+public class ReelCreateRequest {
+
+    @NotBlank(message = "Reel URL is required")
+    private String reelUrl;
+
+    private String platform; // instagram / youtube
+    private String notes;
+
+    // optional
+    private String placeName;
+    private String city;
+}
