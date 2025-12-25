@@ -14,4 +14,5 @@ public class ReelResponse {
     private String platform;
     private String notes;
     private String placeName;
+    private String country;
 }

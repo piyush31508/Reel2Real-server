@@ -14,7 +14,11 @@ public class ReelCreateRequest {
     private String platform; // instagram / youtube
     private String notes;
 
+    private String caption;  // 👉 used for auto-tag
+    private String hashtags; // 👉 used for auto-tag
+
     // optional
     private String placeName;
     private String city;
+    private String country;
 }

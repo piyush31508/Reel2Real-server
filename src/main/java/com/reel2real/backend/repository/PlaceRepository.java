@@ -8,7 +8,11 @@ import java.util.UUID;
 
 public interface PlaceRepository extends JpaRepository<Place, UUID> {
 
-    List<Place> findByCity(String city);
+    List<Place> findByNameIgnoreCase(String name);
 
-    List<Place> findByCityAndCategory(String city, String category);
+    List<Place> findByNameIgnoreCaseAndCityIgnoreCase(String name, String city);
+
+    List<Place> findByCityIgnoreCase(String city);
+
+    List<Place> findByCityIgnoreCaseAndCategoryIgnoreCase(String city, String category);
 }

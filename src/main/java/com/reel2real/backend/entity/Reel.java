@@ -28,7 +28,7 @@ public class Reel {
     @Column(length = 50)
     private String platform; // instagram, youtube, fb, etc.
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "place_id")
     private Place place;
 

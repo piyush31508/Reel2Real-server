@@ -23,6 +23,9 @@ public class Place {
     @Column(nullable = false, length = 100)
     private String city;
 
+    @Column
+    private String country;
+
     @Column(length = 50)
     private String category;
 

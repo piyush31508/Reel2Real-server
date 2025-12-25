@@ -1,6 +1,8 @@
 package com.reel2real.backend.controller;
 
 import com.reel2real.backend.dto.trip.TripCreateRequest;
+import com.reel2real.backend.dto.trip.TripPlaceRequest;
+import com.reel2real.backend.dto.trip.TripPlaceResponse;
 import com.reel2real.backend.dto.trip.TripResponse;
 import com.reel2real.backend.service.TripService;
 import jakarta.validation.Valid;
@@ -19,6 +21,10 @@ public class TripController {
 
     private final TripService tripService;
 
+    // =========================
+    // EXISTING
+    // =========================
+
     @PostMapping("/user/{userId}")
     public ResponseEntity<TripResponse> createTrip(
             @PathVariable UUID userId,
@@ -36,6 +42,35 @@ public class TripController {
     ) {
         return ResponseEntity.ok(
                 tripService.getTripsForUser(userId)
+        );
+    }
+
+    // =========================
+    // 🔥 TRIPPLACE APIs
+    // =========================
+
+    @PostMapping("/{tripId}/places")
+    public ResponseEntity<Void> addPlaceToTrip(
+            @PathVariable UUID tripId,
+            @Valid @RequestBody TripPlaceRequest request
+    ) {
+        tripService.addPlaceToTrip(tripId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @GetMapping("/{tripId}/suggestions")
+    public ResponseEntity<List<TripPlaceResponse>> suggestions(
+            @PathVariable UUID tripId
+    ) {
+        return ResponseEntity.ok(tripService.suggestPlaces(tripId));
+    }
+
+    @GetMapping("/{tripId}/places")
+    public ResponseEntity<List<TripPlaceResponse>> getTripPlaces(
+            @PathVariable UUID tripId
+    ) {
+        return ResponseEntity.ok(
+                tripService.getTripPlaces(tripId)
         );
     }
 }
