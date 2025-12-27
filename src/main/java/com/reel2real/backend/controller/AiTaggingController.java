@@ -13,12 +13,13 @@ public class AiTaggingController {
 
     private final AiTaggingService aiTaggingService;
 
-    @GetMapping
+    @PostMapping
     public ResponseEntity<AiTagResponse> analyze(
             @RequestParam(required = false) String caption,
             @RequestParam(required = false) String hashtags
     ) {
-        AiTagResponse result = aiTaggingService.analyze(caption, hashtags);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(
+                aiTaggingService.analyze(caption, hashtags)
+        );
     }
 }

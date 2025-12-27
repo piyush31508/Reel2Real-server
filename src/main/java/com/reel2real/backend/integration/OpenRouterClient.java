@@ -30,10 +30,7 @@ public class OpenRouterClient {
         Map<String, Object> request = Map.of(
                 "model", model,
                 "messages", List.of(
-                        Map.of(
-                                "role", "user",
-                                "content", prompt
-                        )
+                        Map.of("role", "user", "content", prompt)
                 )
         );
 

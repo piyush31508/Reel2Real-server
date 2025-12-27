@@ -34,4 +34,11 @@ public class Place {
 
     @Column(name = "google_maps_url")
     private String googleMapsUrl;
+
+    private String activity;
+    private String season;
+    private String crowdLevel;
+    private String budgetLevel;
+    private String safetyNote;
+
 }

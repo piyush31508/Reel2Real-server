@@ -17,14 +17,30 @@ public class NominatimClient {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    public double[] getLatLng(String place, String city) {
+    public double[] getLatLng(String place, String city, String country) {
 
-        // Try: "Place, City"
-        double[] result = call(place + ", " + city);
-        if (result != null) return result;
+        double[] res = call(build(place, city, country));
+        if (res != null) return res;
 
-        // Fallback: "Place"
-        return call(place);
+        res = call(build(place, city));
+        if (res != null) return res;
+
+        res = call(build(place, country));
+        if (res != null) return res;
+
+        if (city != null) {
+            res = call(build(city, country));
+        }
+
+        return res;
+    }
+
+    private String build(String... parts) {
+        return String.join(", ",
+                List.of(parts).stream()
+                        .filter(p -> p != null && !p.isBlank())
+                        .toList()
+        );
     }
 
     @SuppressWarnings("unchecked")
@@ -43,7 +59,7 @@ public class NominatimClient {
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
 
         ResponseEntity<List> response =
-                restTemplate.exchange(
+                new RestTemplate().exchange(
                         url,
                         HttpMethod.GET,
                         new HttpEntity<>(headers),

@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class ReelServiceImpl implements ReelService {
 
     private final ReelRepository reelRepository;
@@ -31,87 +32,33 @@ public class ReelServiceImpl implements ReelService {
     private final AiTaggingService aiTaggingService;
 
     @Override
-    @Transactional
     public ReelResponse addReel(UUID userId, ReelCreateRequest request) {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // 🔹 AI TAG
-        AiTagResponse aiTag = null;
-        if (hasText(request.getCaption()) || hasText(request.getHashtags())) {
-            aiTag = aiTaggingService.analyze(
-                    request.getCaption(),
-                    request.getHashtags()
-            );
-        }
+        AiTagResponse ai = hasAIInput(request)
+                ? aiTaggingService.analyze(request.getCaption(), request.getHashtags())
+                : null;
 
-        // 🔹 Merge manual + AI
-        String placeName = pick(request.getPlaceName(), aiTag != null ? aiTag.getPlaceName() : null);
-        String city = pick(request.getCity(), aiTag != null ? aiTag.getCity() : null);
-        String country = pick(request.getCountry(), aiTag != null ? aiTag.getCountry() : null);
-        String category = aiTag != null ? aiTag.getCategory() : null;
+        String placeName = pick(request.getPlaceName(), ai != null ? ai.getPlaceName() : null);
+        String city = pick(request.getCity(), ai != null ? ai.getCity() : null);
+        String country = pick(request.getCountry(), ai != null ? ai.getCountry() : null);
 
-        Place place = null;
+        Place place = resolvePlace(placeName, city, country, ai);
 
-        if (hasText(placeName) && hasText(city)) {
+        Reel reel = reelRepository.save(
+                Reel.builder()
+                        .user(user)
+                        .reelUrl(request.getReelUrl())
+                        .platform(request.getPlatform())
+                        .notes(request.getNotes())
+                        .place(place)
+                        .createdAt(LocalDateTime.now())
+                        .build()
+        );
 
-            List<Place> matches =
-                    placeRepository.findByNameIgnoreCaseAndCityIgnoreCase(placeName, city);
-
-            if (!matches.isEmpty()) {
-                // Pick first
-                place = matches.get(0);
-
-                // Update missing fields
-                boolean updated = false;
-
-                if (country != null && (place.getCountry() == null || place.getCountry().isBlank())) {
-                    place.setCountry(country);
-                    updated = true;
-                }
-                if (category != null && (place.getCategory() == null || place.getCategory().isBlank())) {
-                    place.setCategory(category);
-                    updated = true;
-                }
-
-                if (updated) {
-                    place = placeRepository.save(place);
-                }
-
-            } else {
-                // Create new place
-                place = placeRepository.save(
-                        Place.builder()
-                                .name(placeName)
-                                .city(city)
-                                .country(country)
-                                .category(category)
-                                .build()
-                );
-            }
-        }
-
-        // 🔹 Create Reel
-        Reel reel = Reel.builder()
-                .user(user)
-                .reelUrl(request.getReelUrl())
-                .platform(request.getPlatform())
-                .notes(request.getNotes())
-                .place(place)
-                .createdAt(LocalDateTime.now())
-                .build();
-
-        Reel saved = reelRepository.save(reel);
-
-        return ReelResponse.builder()
-                .id(saved.getId())
-                .reelUrl(saved.getReelUrl())
-                .platform(saved.getPlatform())
-                .notes(saved.getNotes())
-                .placeName(place != null ? place.getName() : null)
-                .country(place != null ? place.getCountry() : null)
-                .build();
+        return mapToResponse(reel);
     }
 
     @Override
@@ -123,19 +70,62 @@ public class ReelServiceImpl implements ReelService {
 
         return reelRepository.findByUser(user)
                 .stream()
-                .map(reel -> ReelResponse.builder()
-                        .id(reel.getId())
-                        .reelUrl(reel.getReelUrl())
-                        .platform(reel.getPlatform())
-                        .notes(reel.getNotes())
-                        .placeName(
-                                reel.getPlace() != null ? reel.getPlace().getName() : null
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    private Place resolvePlace(
+            String name, String city, String country, AiTagResponse ai
+    ) {
+        if (!hasText(name) || !hasText(city)) return null;
+
+        return placeRepository
+                .findFirstByNameIgnoreCaseAndCityIgnoreCase(name, city)
+                .map(existing -> updateIfMissing(existing, country, ai))
+                .orElseGet(() ->
+                        placeRepository.save(
+                                Place.builder()
+                                        .name(name)
+                                        .city(city)
+                                        .country(country)
+                                        .category(ai != null ? ai.getCategory() : null)
+                                        .activity(ai != null ? ai.getActivity() : null)
+                                        .crowdLevel(ai != null ? ai.getCrowdLevel() : null)
+                                        .budgetLevel(ai != null ? ai.getBudgetLevel() : null)
+                                        .safetyNote(ai != null ? ai.getSafetyNote() : null)
+                                        .build()
                         )
-                        .country(
-                                reel.getPlace() != null ? reel.getPlace().getCountry() : null
-                        )
-                        .build()
-                ).collect(Collectors.toList());
+                );
+    }
+
+    private Place updateIfMissing(Place p, String country, AiTagResponse ai) {
+        boolean updated = false;
+
+        if (p.getCountry() == null && country != null) {
+            p.setCountry(country);
+            updated = true;
+        }
+        if (ai != null && p.getCategory() == null) {
+            p.setCategory(ai.getCategory());
+            updated = true;
+        }
+
+        return updated ? placeRepository.save(p) : p;
+    }
+
+    private ReelResponse mapToResponse(Reel r) {
+        return ReelResponse.builder()
+                .id(r.getId())
+                .reelUrl(r.getReelUrl())
+                .platform(r.getPlatform())
+                .notes(r.getNotes())
+                .placeName(r.getPlace() != null ? r.getPlace().getName() : null)
+                .country(r.getPlace() != null ? r.getPlace().getCountry() : null)
+                .build();
+    }
+
+    private boolean hasAIInput(ReelCreateRequest r) {
+        return hasText(r.getCaption()) || hasText(r.getHashtags());
     }
 
     private boolean hasText(String s) {

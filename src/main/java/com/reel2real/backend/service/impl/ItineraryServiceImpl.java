@@ -44,38 +44,30 @@ public class ItineraryServiceImpl implements ItineraryService {
             throw new ResourceNotFoundException("No places added to trip");
         }
 
-        // 1. Load places + ensure lat/lng
+        // 1️⃣ Load + geo-enrich places
         List<Place> places = tripPlaces.stream()
                 .map(TripPlace::getPlace)
                 .map(this::ensureLatLng)
                 .toList();
 
-        // 2. Order places by preference & distance
+        // 2️⃣ Preference sorting
         List<Place> preferenceSorted =
                 sortByPreference(places, trip.getTravelStyle());
 
+        // 3️⃣ Distance optimization
         List<Place> orderedPlaces =
                 orderPlacesByDistance(preferenceSorted);
 
-        // 3. Cluster by daily time budgets
+        // 4️⃣ Distribute days
         List<List<Place>> dayClusters =
-                clusterPlacesByTime(orderedPlaces, trip.getTotalDays());
+                distributePlacesSmartly(orderedPlaces, trip.getTotalDays());
 
-        // ============= STEP D ENHANCEMENTS =============
-
-        // D.1 handle empty days
-        dayClusters = fixEmptyDays(dayClusters);
-
-        // D.2 optimize each day's route by ORS
-        for (int d = 0; d < dayClusters.size(); d++) {
-            dayClusters.set(d, optimizeDayRoute(dayClusters.get(d)));
+        // 5️⃣ Optimize per-day route
+        for (int i = 0; i < dayClusters.size(); i++) {
+            dayClusters.set(i, optimizeDayRoute(dayClusters.get(i)));
         }
 
-        // D.3 rebalance if a day exceeds 8 hours
-        rebalanceOverflow(dayClusters);
-
-        // ============= RETURN RESPONSE =============
-
+        // 6️⃣ Response
         List<ItineraryResponse> response = new ArrayList<>();
 
         for (int i = 0; i < dayClusters.size(); i++) {
@@ -95,13 +87,13 @@ public class ItineraryServiceImpl implements ItineraryService {
         return response;
     }
 
+    // =======================
+    // STEP A: PREFERENCE SORT
+    // =======================
+
     private List<Place> sortByPreference(List<Place> places, String travelStyle) {
         return places.stream()
-                .sorted(
-                        Comparator.comparingInt(
-                                p -> getPreferenceScore(p, travelStyle)
-                        )
-                )
+                .sorted(Comparator.comparingInt(p -> getPreferenceScore(p, travelStyle)))
                 .toList();
     }
 
@@ -111,21 +103,16 @@ public class ItineraryServiceImpl implements ItineraryService {
                 ? place.getCategory().toLowerCase()
                 : "default";
 
-        if (travelStyle == null) {
-            return 5;
-        }
+        if (travelStyle == null) return 5;
 
         return switch (travelStyle.toLowerCase()) {
-
             case "relaxed" -> switch (category) {
                 case "beach" -> 1;
                 case "nature" -> 2;
                 case "market" -> 3;
                 case "monument" -> 4;
-                case "food" -> 5;
-                default -> 6;
+                default -> 5;
             };
-
             case "packed" -> switch (category) {
                 case "monument" -> 1;
                 case "market" -> 2;
@@ -133,13 +120,12 @@ public class ItineraryServiceImpl implements ItineraryService {
                 case "beach" -> 4;
                 default -> 5;
             };
-
             default -> 5;
         };
     }
 
     // =======================
-    // GEO HELPERS
+    // GEO ENRICHMENT
     // =======================
 
     private Place ensureLatLng(Place place) {
@@ -150,10 +136,10 @@ public class ItineraryServiceImpl implements ItineraryService {
 
         double[] latLng = nominatimClient.getLatLng(
                 place.getName(),
-                place.getCity()
+                place.getCity(),
+                place.getCountry()
         );
 
-        // Minimal-safe behavior: skip if geocoding fails
         if (latLng == null) {
             return place;
         }
@@ -165,186 +151,127 @@ public class ItineraryServiceImpl implements ItineraryService {
     }
 
     // =======================
-    // DISTANCE OPTIMIZATION
+    // STEP B: DISTANCE SORT
     // =======================
 
     private List<Place> orderPlacesByDistance(List<Place> places) {
 
-        if (places.size() <= 1) {
-            return places;
-        }
-
-        List<double[]> coordinates = places.stream()
-                .map(p -> new double[]{p.getLongitude(), p.getLatitude()})
+        List<Place> geoReady = places.stream()
+                .filter(p -> p.getLatitude() != null && p.getLongitude() != null)
                 .toList();
 
-        double[][] matrix = orsClient.getDistanceMatrix(coordinates);
+        List<Place> noGeo = places.stream()
+                .filter(p -> p.getLatitude() == null || p.getLongitude() == null)
+                .toList();
 
-        List<Place> ordered = new ArrayList<>();
-        boolean[] visited = new boolean[places.size()];
-
-        int currentIndex = 0;
-        ordered.add(places.get(currentIndex));
-        visited[currentIndex] = true;
-
-        for (int step = 1; step < places.size(); step++) {
-
-            double minDistance = Double.MAX_VALUE;
-            int nearestIndex = -1;
-
-            for (int i = 0; i < places.size(); i++) {
-                if (!visited[i] && matrix[currentIndex][i] < minDistance) {
-                    minDistance = matrix[currentIndex][i];
-                    nearestIndex = i;
-                }
-            }
-
-            visited[nearestIndex] = true;
-            ordered.add(places.get(nearestIndex));
-            currentIndex = nearestIndex;
+        if (geoReady.size() <= 1) {
+            List<Place> result = new ArrayList<>(geoReady);
+            result.addAll(noGeo);
+            return result;
         }
 
-        return ordered;
-    }
-
-    // =======================
-    // STEP C: TIME-AWARE CLUSTERING
-    // =======================
-
-    private List<List<Place>> clusterPlacesByTime(
-            List<Place> orderedPlaces,
-            int totalDays
-    ) {
-
-        double DAILY_HOURS = 8.0;
-
-        List<List<Place>> result = new ArrayList<>();
-        int index = 0;
-
-        for (int day = 1; day <= totalDays; day++) {
-
-            double remainingHours = DAILY_HOURS;
-            List<Place> dayPlaces = new ArrayList<>();
-
-            while (index < orderedPlaces.size()) {
-
-                Place place = orderedPlaces.get(index);
-                double required = estimateVisitHours(place);
-
-                if (required > remainingHours) {
-                    break;
-                }
-
-                dayPlaces.add(place);
-                remainingHours -= required;
-                index++;
-            }
-
-            result.add(dayPlaces);
-        }
-
-        return result;
-    }
-
-    private double estimateVisitHours(Place place) {
-
-        if (place.getCategory() == null) {
-            return 2.0;
-        }
-
-        return switch (place.getCategory().toLowerCase()) {
-            case "beach" -> 2.5;
-            case "monument" -> 2.0;
-            case "market" -> 1.5;
-            case "food" -> 1.0;
-            default -> 2.0;
-        };
-    }
-
-    // =======================
-    // STEP D: FIX EMPTY DAYS
-    // =======================
-
-    private List<List<Place>> fixEmptyDays(List<List<Place>> clusters) {
-
-        for (int i = 0; i < clusters.size(); i++) {
-            if (clusters.get(i).isEmpty() && i > 0) {
-
-                List<Place> previous = clusters.get(i - 1);
-
-                if (!previous.isEmpty()) {
-                    Place moved = previous.remove(previous.size() - 1);
-                    clusters.get(i).add(moved);
-                }
-            }
-        }
-        return clusters;
-    }
-
-    // =======================
-    // STEP D: INTRA-DAY OPTIMIZATION
-    // =======================
-
-    private List<Place> optimizeDayRoute(List<Place> dayPlaces) {
-
-        if (dayPlaces.size() <= 2) return dayPlaces;
-
-        List<double[]> coords = dayPlaces.stream()
+        List<double[]> coords = geoReady.stream()
                 .map(p -> new double[]{p.getLongitude(), p.getLatitude()})
                 .toList();
 
         double[][] matrix = orsClient.getDistanceMatrix(coords);
 
-        boolean[] visited = new boolean[dayPlaces.size()];
-        List<Place> result = new ArrayList<>();
+        boolean[] visited = new boolean[geoReady.size()];
+        List<Place> ordered = new ArrayList<>();
 
         int current = 0;
         visited[current] = true;
-        result.add(dayPlaces.get(current));
+        ordered.add(geoReady.get(current));
 
-        for (int step = 1; step < dayPlaces.size(); step++) {
-
-            double best = Double.MAX_VALUE;
+        for (int step = 1; step < geoReady.size(); step++) {
+            double min = Double.MAX_VALUE;
             int next = -1;
 
-            for (int i = 0; i < dayPlaces.size(); i++) {
-                if (!visited[i] && matrix[current][i] < best) {
-                    best = matrix[current][i];
+            for (int i = 0; i < geoReady.size(); i++) {
+                if (!visited[i] && matrix[current][i] < min) {
+                    min = matrix[current][i];
                     next = i;
                 }
             }
 
             visited[next] = true;
-            result.add(dayPlaces.get(next));
+            ordered.add(geoReady.get(next));
             current = next;
+        }
+
+        ordered.addAll(noGeo);
+        return ordered;
+    }
+
+    // =======================
+    // STEP C: DAY DISTRIBUTION
+    // =======================
+
+    private List<List<Place>> distributePlacesSmartly(List<Place> places, int totalDays) {
+
+        List<List<Place>> result = new ArrayList<>();
+
+        for (int i = 0; i < totalDays; i++) {
+            result.add(new ArrayList<>());
+        }
+
+        for (int i = 0; i < places.size(); i++) {
+            result.get(i % totalDays).add(places.get(i));
         }
 
         return result;
     }
 
     // =======================
-    // STEP D: REBALANCE OVERFLOW
+    // STEP D: INTRA-DAY ROUTE
     // =======================
 
-    private void rebalanceOverflow(List<List<Place>> clusters) {
+    private List<Place> optimizeDayRoute(List<Place> dayPlaces) {
 
-        double DAILY = 8.0;
+        List<Place> geoReady = dayPlaces.stream()
+                .filter(p -> p.getLatitude() != null && p.getLongitude() != null)
+                .toList();
 
-        for (int i = 0; i < clusters.size() - 1; i++) {
+        List<Place> noGeo = dayPlaces.stream()
+                .filter(p -> p.getLatitude() == null || p.getLongitude() == null)
+                .toList();
 
-            List<Place> today = clusters.get(i);
-            double hours = today.stream().mapToDouble(this::estimateVisitHours).sum();
-
-            while (hours > DAILY && !today.isEmpty()) {
-
-                Place moved = today.remove(today.size() - 1);
-
-                clusters.get(i + 1).add(0, moved);
-
-                hours = today.stream()
-                        .mapToDouble(this::estimateVisitHours)
-                        .sum();
-            }
+        if (geoReady.size() <= 2) {
+            List<Place> result = new ArrayList<>(geoReady);
+            result.addAll(noGeo);
+            return result;
         }
+
+        List<double[]> coords = geoReady.stream()
+                .map(p -> new double[]{p.getLongitude(), p.getLatitude()})
+                .toList();
+
+        double[][] matrix = orsClient.getDistanceMatrix(coords);
+
+        boolean[] visited = new boolean[geoReady.size()];
+        List<Place> ordered = new ArrayList<>();
+
+        int current = 0;
+        visited[current] = true;
+        ordered.add(geoReady.get(current));
+
+        for (int step = 1; step < geoReady.size(); step++) {
+            double min = Double.MAX_VALUE;
+            int next = -1;
+
+            for (int i = 0; i < geoReady.size(); i++) {
+                if (!visited[i] && matrix[current][i] < min) {
+                    min = matrix[current][i];
+                    next = i;
+                }
+            }
+
+            visited[next] = true;
+            ordered.add(geoReady.get(next));
+            current = next;
+        }
+
+        ordered.addAll(noGeo);
+        return ordered;
     }
 }

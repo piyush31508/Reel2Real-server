@@ -18,34 +18,51 @@ public class AiTaggingServiceImpl implements AiTaggingService {
     public AiTagResponse analyze(String caption, String hashtags) {
 
         String prompt = buildPrompt(caption, hashtags);
+        String rawResponse = openRouterClient.generate(prompt);
 
-        // 🔥 Call OpenRouter API
-        String rawResponse = callOpenRouter(prompt);
-
-        System.out.println("🔹 RAW LLM OUTPUT:");
-        System.out.println(rawResponse);
+        System.out.println("🔹 RAW LLM OUTPUT:\n" + rawResponse);
 
         AiTagResponse parsed = parseJson(rawResponse);
+        normalize(parsed);
 
-        System.out.println("🔹 PARSED OUTPUT:");
-        System.out.println(parsed);
-
+        System.out.println("🔹 PARSED OUTPUT:\n" + parsed);
         return parsed;
     }
 
     private String buildPrompt(String caption, String hashtags) {
-        return
-                "Extract travel location info from text. " +
-                        "Return only a valid JSON object with no commentary.\n" +
-                        "Fields: placeName, city, country, category.\n\n" +
-                        "**Caption:** " + caption + "\n" +
-                        "**Hashtags:** " + hashtags + "\n\n" +
-                        "Output format strictly:\n" +
-                        "{ \"placeName\": \"\", \"city\": \"\", \"country\": \"\", \"category\": \"\" }";
-    }
+        return """
+You are a travel intelligence extractor.
 
-    private String callOpenRouter(String prompt) {
-        return openRouterClient.generate(prompt);
+Extract ONLY structured travel data.
+Return STRICT JSON only.
+
+Fields:
+- placeName
+- city
+- country
+- category
+- activity
+- season
+- crowdLevel
+- budgetLevel
+- safetyNote
+
+Caption: %s
+Hashtags: %s
+
+Output:
+{
+  "placeName": "",
+  "city": "",
+  "country": "",
+  "category": "",
+  "activity": "",
+  "season": "",
+  "crowdLevel": "",
+  "budgetLevel": "",
+  "safetyNote": ""
+}
+""".formatted(caption, hashtags);
     }
 
     private AiTagResponse parseJson(String raw) {
@@ -54,13 +71,28 @@ public class AiTaggingServiceImpl implements AiTaggingService {
                     .replace("```json", "")
                     .replace("```", "")
                     .trim();
-
             return mapper.readValue(cleaned, AiTagResponse.class);
-
         } catch (Exception e) {
-            e.printStackTrace(); // add this
+            e.printStackTrace();
             return AiTagResponse.builder().build();
         }
     }
 
+    private void normalize(AiTagResponse r) {
+        if (r == null) return;
+
+        if (isBlank(r.getCity()) && !isBlank(r.getPlaceName())) {
+            r.setCity(r.getPlaceName());
+            r.setPlaceName(null);
+        }
+
+        if (isBlank(r.getPlaceName())) r.setPlaceName(null);
+        if (isBlank(r.getCity())) r.setCity(null);
+        if (isBlank(r.getCountry())) r.setCountry(null);
+        if (isBlank(r.getCategory())) r.setCategory(null);
+    }
+
+    private boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
 }
