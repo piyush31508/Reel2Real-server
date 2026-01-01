@@ -2,6 +2,8 @@ package com.reel2real.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -40,5 +42,10 @@ public class Place {
     private String crowdLevel;
     private String budgetLevel;
     private String safetyNote;
+    private Integer minCost;
+    private Integer maxCost;
+    @Column(name = "enrichment_status")
+    private String enrichmentStatus;
+    private LocalDateTime lastEnrichedAt;
 
 }
