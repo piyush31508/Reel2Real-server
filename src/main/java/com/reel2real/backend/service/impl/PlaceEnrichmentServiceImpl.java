@@ -131,9 +131,4 @@ public class PlaceEnrichmentServiceImpl implements PlaceEnrichmentService {
                 .replace("```", "")
                 .trim();
     }
-
-    @Override
-    public void enrichPlaceAsync(org.hibernate.validator.constraints.UUID placeId) {
-
-    }
 }
