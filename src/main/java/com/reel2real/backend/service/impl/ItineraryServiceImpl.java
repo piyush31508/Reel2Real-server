@@ -65,7 +65,7 @@ public class ItineraryServiceImpl implements ItineraryService {
 
         // 4️⃣ Budget Reality Meter (ONCE)
         BudgetRealityResponse budgetReality =
-                budgetRealityService.calculate(orderedPlaces);
+                budgetRealityService.calculate(orderedPlaces, trip);
 
         // 5️⃣ Distribute places across days
         List<List<Place>> dayClusters =
