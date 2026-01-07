@@ -16,22 +16,48 @@ public class ItineraryController {
 
     private final ItineraryService itineraryService;
 
+    // =====================================================
+    // PHASE 2 – Generate (SAME ENDPOINT)
+    // =====================================================
     @GetMapping("/trip/{tripId}")
-    public ResponseEntity<List<ItineraryResponse>> generate(
+    public ResponseEntity<List<ItineraryResponse>> generateItinerary(
             @PathVariable UUID tripId
     ) {
-        return ResponseEntity.ok(
-                itineraryService.generateItinerary(tripId)
-        );
+        List<ItineraryResponse> result =
+                itineraryService.generateItinerary(tripId);
+
+        return ResponseEntity.ok(result);
     }
 
-//    @PostMapping("/trip/{tripId}/regenerate")
-//    public ResponseEntity<List<ItineraryResponse>> regenerate(
-//            @PathVariable UUID tripId
-//    ) {
-//        return ResponseEntity.ok(
-//                itineraryService.regenerateItinerary(tripId)
-//        );
-//    }
+    // =====================================================
+    // PHASE 3 – Regenerate (SAME ENDPOINT)
+    // =====================================================
+    @PostMapping("/trip/{tripId}/regenerate")
+    public ResponseEntity<List<ItineraryResponse>> regenerateItinerary(
+            @PathVariable UUID tripId
+    ) {
+        List<ItineraryResponse> result =
+                itineraryService.regenerateItinerary(tripId);
 
+        return ResponseEntity.ok(result);
+    }
+
+    // =====================================================
+    // 🔥 PHASE 3 – NEW: Lock Day Endpoint
+    // (ONLY ADDITION – prev code safe)
+    // =====================================================
+    @PostMapping("/trip/{tripId}/lock-day/{dayNumber}")
+    public ResponseEntity<Void> lockDay(
+            @PathVariable UUID tripId,
+            @PathVariable int dayNumber
+    ) {
+
+        if (dayNumber <= 0) {
+            throw new IllegalArgumentException("Day number must be ≥ 1");
+        }
+
+        itineraryService.lockDay(tripId, dayNumber);
+
+        return ResponseEntity.ok().build();
+    }
 }

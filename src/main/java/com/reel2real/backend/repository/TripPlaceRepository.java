@@ -12,5 +12,7 @@ public interface TripPlaceRepository extends JpaRepository<TripPlace, UUID> {
 
     List<TripPlace> findByTrip(Trip trip);
 
+    List<TripPlace> findByTripId(UUID tripId);
+
     boolean existsByTripAndPlace(Trip trip, Place place);
 }

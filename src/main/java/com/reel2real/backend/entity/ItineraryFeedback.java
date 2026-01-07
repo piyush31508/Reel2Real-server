@@ -2,6 +2,8 @@ package com.reel2real.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -9,6 +11,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "itinerary_feedback")
 @Data
+@Getter
+@Setter
 public class ItineraryFeedback {
 
     @Id
@@ -16,7 +20,7 @@ public class ItineraryFeedback {
     private UUID id;
 
     private UUID tripId;
-    private int dayNumber;
+    private Integer dayNumber;
 
     private UUID placeId; // nullable
 

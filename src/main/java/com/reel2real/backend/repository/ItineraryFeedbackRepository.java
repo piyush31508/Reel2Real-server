@@ -1,7 +1,6 @@
 package com.reel2real.backend.repository;
 
 import com.reel2real.backend.entity.ItineraryFeedback;
-import com.reel2real.backend.entity.Trip;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -12,9 +11,10 @@ import java.util.UUID;
 public interface ItineraryFeedbackRepository
         extends JpaRepository<ItineraryFeedback, UUID> {
 
-    boolean existsByTripAndDayNumberAndFeedbackType(
-            Trip trip,
-            int dayNumber,
+    // 👉 EXACT MATCH TO YOUR ENTITY
+    boolean existsByTripIdAndDayNumberAndFeedbackType(
+            UUID tripId,
+            Integer dayNumber,
             String feedbackType
     );
 
@@ -22,4 +22,6 @@ public interface ItineraryFeedbackRepository
             UUID tripId,
             String feedbackType
     );
+
+    List<ItineraryFeedback> findByTripId(UUID tripId);
 }

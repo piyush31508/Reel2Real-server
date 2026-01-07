@@ -11,5 +11,5 @@ public interface ItineraryService {
 
     void lockDay(UUID tripId, int dayNumber);
 
-    List<ItineraryResponse> regenerate(UUID tripId);
+    public List<ItineraryResponse> regenerateItinerary(UUID tripId);
 }
