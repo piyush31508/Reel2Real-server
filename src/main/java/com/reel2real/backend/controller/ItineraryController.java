@@ -24,4 +24,14 @@ public class ItineraryController {
                 itineraryService.generateItinerary(tripId)
         );
     }
+
+//    @PostMapping("/trip/{tripId}/regenerate")
+//    public ResponseEntity<List<ItineraryResponse>> regenerate(
+//            @PathVariable UUID tripId
+//    ) {
+//        return ResponseEntity.ok(
+//                itineraryService.regenerateItinerary(tripId)
+//        );
+//    }
+
 }

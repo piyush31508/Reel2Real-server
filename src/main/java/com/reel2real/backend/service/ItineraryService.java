@@ -8,4 +8,8 @@ import java.util.UUID;
 public interface ItineraryService {
 
     List<ItineraryResponse> generateItinerary(UUID tripId);
+
+    void lockDay(UUID tripId, int dayNumber);
+
+    List<ItineraryResponse> regenerate(UUID tripId);
 }

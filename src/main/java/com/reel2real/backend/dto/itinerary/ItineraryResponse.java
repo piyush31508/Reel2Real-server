@@ -16,6 +16,9 @@ public class ItineraryResponse {
     // 🔥 Explainability
     private String reason;
 
+    private Integer confidenceScore;
+    private String confidenceLabel;
+
     // 🔥 Budget Reality Meter (ONLY on Day 1)
     private BudgetRealityResponse budgetReality;
 }
