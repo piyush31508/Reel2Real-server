@@ -1,20 +1,14 @@
 package com.reel2real.backend.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.reel2real.backend.dto.budget.BudgetRealityResponse;
 import com.reel2real.backend.dto.itinerary.ItineraryResponse;
-import com.reel2real.backend.entity.ItineraryFeedback;
-import com.reel2real.backend.entity.Place;
-import com.reel2real.backend.entity.Trip;
-import com.reel2real.backend.entity.TripPlace;
+import com.reel2real.backend.entity.*;
 import com.reel2real.backend.exception.ResourceNotFoundException;
 import com.reel2real.backend.integration.NominatimClient;
 import com.reel2real.backend.integration.OpenRouteServiceClient;
 import com.reel2real.backend.integration.WeatherClient;
-import com.reel2real.backend.itinerary.ConfidenceCalculator;
-import com.reel2real.backend.repository.ItineraryFeedbackRepository;
-import com.reel2real.backend.repository.PlaceRepository;
-import com.reel2real.backend.repository.TripPlaceRepository;
-import com.reel2real.backend.repository.TripRepository;
+import com.reel2real.backend.repository.*;
 import com.reel2real.backend.service.BudgetRealityService;
 import com.reel2real.backend.service.ItineraryService;
 import com.reel2real.backend.weather.WeatherType;
@@ -22,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,173 +27,234 @@ public class ItineraryServiceImpl implements ItineraryService {
     private final TripRepository tripRepository;
     private final TripPlaceRepository tripPlaceRepository;
     private final PlaceRepository placeRepository;
-    private final WeatherClient weatherClient;
-    private final BudgetRealityService budgetRealityService;
     private final ItineraryFeedbackRepository feedbackRepository;
+    private final ItineraryVersionRepository versionRepository;
+    private final BudgetRealityService budgetRealityService;
+
+    private final WeatherClient weatherClient;
+
     private final OpenRouteServiceClient orsClient;
     private final NominatimClient nominatimClient;
 
-    // =====================================================
-    // PHASE 2 – GENERATE ITINERARY (PREVIOUS CODE)
-    // =====================================================
+    private final ObjectMapper mapper = new ObjectMapper();
 
+    // =====================================================
+    // PHASE 2 – GENERATE ITINERARY
+    // =====================================================
     @Override
     @Transactional
     public List<ItineraryResponse> generateItinerary(UUID tripId) {
 
         Trip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new ResourceNotFoundException("Trip not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Trip not found")
+                );
 
-        List<TripPlace> tripPlaces = tripPlaceRepository.findByTrip(trip);
-        if (tripPlaces.isEmpty()) {
-            throw new ResourceNotFoundException("No places added to trip");
+        List<Place> places =
+                tripPlaceRepository.findByTrip(trip)
+                        .stream()
+                        .map(TripPlace::getPlace)
+                        .map(this::ensureLatLng)
+                        .collect(Collectors.toList());
+
+        if (places.isEmpty()) {
+            throw new ResourceNotFoundException(
+                    "No places added to trip"
+            );
         }
 
-        // 1️⃣ Load & geo-enrich
-        List<Place> places = tripPlaces.stream()
-                .map(TripPlace::getPlace)
-                .map(this::ensureLatLng)
-                .toList();
-
-        // 2️⃣ Preference + distance optimization
-        List<Place> orderedPlaces =
-                orderPlacesByDistance(
-                        sortByPreference(places, trip.getTravelStyle())
+        List<Place> ordered =
+                    orderPlacesByDistance(
+                        sortByPreference(
+                                places,
+                                trip.getTravelStyle()
+                        )
                 );
 
-        // 3️⃣ Budget Reality (ONCE)
-        BudgetRealityResponse budgetReality =
-                budgetRealityService.calculate(orderedPlaces, trip);
+        BudgetRealityResponse reality =
+                budgetRealityService.calculate(ordered, trip);
 
-        // 4️⃣ Distribute across days
-        List<List<Place>> dayClusters =
-                distributePlacesSmartly(orderedPlaces, trip.getTotalDays());
-
-        // 5️⃣ Weather (ONCE)
         WeatherType weather =
                 WeatherType.from(
-                        weatherClient.getWeather(trip.getDestinationCity())
+                        weatherClient.getWeather(
+                                trip.getDestinationCity()
+                        )
                 );
 
-        // 6️⃣ Build Response
-        List<ItineraryResponse> response = new ArrayList<>();
+        List<List<Place>> dayClusters =
+                distributePlacesSmartly(
+                        ordered,
+                        trip.getTotalDays()
+                );
 
-        for (int i = 0; i < dayClusters.size(); i++) {
+        List<ItineraryResponse> response =
+                new ArrayList<>();
 
-            List<Place> optimizedDay =
-                    optimizeDayRoute(
-                            applyWeatherRules(dayClusters.get(i), weather)
-                    );
+        for (int i = 0;
+             i < dayClusters.size();
+             i++) {
 
-            String reason =
-                    buildReasonMessage(weather, trip.getTravelStyle(), optimizedDay);
+            int currentDay =
+                    i + 1;
 
-            int confidence =
-                    ConfidenceCalculator.calculate(
-                            optimizedDay,
-                            weather,
-                            trip.getTravelStyle(),
-                            i == 0 && budgetReality != null
-                    );
+            if(trip.getLockedDays()
+                    .contains(currentDay))
+                continue;
 
-            ItineraryResponse.ItineraryResponseBuilder builder =
+            List<String> names =
+                    applyWeatherRules(
+                            dayClusters.get(i),
+                            weather
+                    ).stream()
+                            .map(Place::getName)
+                            .toList();
+
+            int confidence = 80;
+
+            // 🔥 Save ORIGINAL version on day 1
+            createVersion(
+                    tripId,
+                    currentDay,
+                    names,
+                    confidence,
+                    "ORIGINAL"
+            );
+
+            ItineraryResponse r =
                     ItineraryResponse.builder()
-                            .dayNumber(i + 1)
-                            .places(
-                                    optimizedDay.stream()
-                                            .map(Place::getName)
-                                            .toList()
-                            )
-                            .reason(reason)
+                            .dayNumber(currentDay)
+                            .places(names)
+                            .reason("Initial itinerary")
                             .confidenceScore(confidence)
-                            .confidenceLabel(
-                                    ConfidenceCalculator.label(confidence)
-                            );
+                            .confidenceLabel("Good")
+                            .budgetReality(currentDay == 1 ? reality : null)
+                            .build();
 
-            // 🔥 Budget shown only on Day 1
-            if (i == 0) {
-                builder.budgetReality(budgetReality);
-            }
 
-            response.add(builder.build());
+            response.add(r);
         }
 
         return response;
     }
 
-    // =====================================================
-    // PHASE 3 – NEW METHODS
-    // =====================================================
+    private List<Place> orderPlacesByDistance(List<Place> places) {
 
+        if (places.size() <= 2) return places;
+
+        // ORS expects [longitude, latitude]
+        List<double[]> coordinates = places.stream()
+                .map(p -> new double[]{
+                        p.getLongitude(),
+                        p.getLatitude()
+                })
+                .toList();
+
+        double[][] matrix = orsClient.getDistanceMatrix(coordinates);
+
+        int n = places.size();
+        boolean[] visited = new boolean[n];
+        List<Place> ordered = new ArrayList<>();
+
+        int current = 0;
+        visited[current] = true;
+        ordered.add(places.get(current));
+
+        for (int step = 1; step < n; step++) {
+
+            int next = -1;
+            double min = Double.MAX_VALUE;
+
+            for (int i = 0; i < n; i++) {
+                if (!visited[i] && matrix[current][i] < min) {
+                    min = matrix[current][i];
+                    next = i;
+                }
+            }
+
+            visited[next] = true;
+            ordered.add(places.get(next));
+            current = next;
+        }
+
+        return ordered;
+    }
+
+    // =====================================================
+    // PHASE 3 – LOCK DAY
+    // =====================================================
     @Override
     @Transactional
-    public void lockDay(UUID tripId, int dayNumber) {
+    public void lockDay(UUID tripId,
+                        int dayNumber) {
 
         Trip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new ResourceNotFoundException("Trip not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Trip not found")
+                );
 
-        trip.getLockedDays().add(dayNumber);
+        trip.getLockedDays()
+                .add(dayNumber);
 
         tripRepository.save(trip);
     }
 
+
+
+    // =====================================================
+    // PHASE 3 – REGENERATE ITINERARY
+    // =====================================================
     @Override
     @Transactional
     public List<ItineraryResponse> regenerateItinerary(UUID tripId) {
 
-        Trip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new ResourceNotFoundException("Trip not found"));
+        Trip trip =
+                tripRepository.findById(tripId)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException("Trip not found")
+                        );
 
-        // ----- PLACES FETCH (PREVIOUS) -----
-        List<Place> allPlaces = tripPlaceRepository.findByTrip(trip)
-                .stream()
-                .map(TripPlace::getPlace)
-                .toList();
-
-        // ----- DISLIKED PLACES -----
         Set<UUID> dislikedPlaces =
-                feedbackRepository.findByTripIdAndFeedbackType(
-                                tripId, "DISLIKE"
-                        )
+                feedbackRepository.findByTripId(tripId)
                         .stream()
                         .map(ItineraryFeedback::getPlaceId)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toSet());
 
-        // ----- DISLIKED DAYS -----
         Set<Integer> dislikedDays =
-                feedbackRepository.findByTripIdAndFeedbackType(
-                                tripId, "DISLIKE"
-                        )
+                feedbackRepository.findByTripId(tripId)
                         .stream()
-                        .filter(f -> f.getPlaceId() == null)
+                        .filter(f ->
+                                f.getPlaceId() == null
+                        )
                         .map(ItineraryFeedback::getDayNumber)
                         .collect(Collectors.toSet());
 
-        // ----- FILTER -----
-        List<Place> filteredPlaces = allPlaces.stream()
-                .filter(p -> !dislikedPlaces.contains(p.getId()))
-                .toList();
+        List<Place> filtered =
+                tripPlaceRepository.findByTrip(trip)
+                        .stream()
+                        .map(TripPlace::getPlace)
+                        .filter(p ->
+                                !dislikedPlaces.contains(p.getId())
+                        )
+                        .toList();
 
-        if (filteredPlaces.isEmpty()) {
+        if(filtered.isEmpty()) {
             throw new IllegalStateException(
-                    "All places were disliked. Cannot regenerate itinerary."
+                    "All places were disliked. Cannot regenerate."
             );
         }
 
-        // ----- PREVIOUS HELPERS REUSED -----
-        List<Place> orderedPlaces =
+        List<Place> ordered =
                 orderPlacesByDistance(
                         sortByPreference(
-                                filteredPlaces,
+                                filtered,
                                 trip.getTravelStyle()
                         )
                 );
 
-        // ----- REDISTRIBUTE -----
-        List<List<Place>> dayClusters =
+        List<List<Place>> clusters =
                 distributePlacesSmartly(
-                        orderedPlaces,
+                        ordered,
                         trip.getTotalDays()
                 );
 
@@ -209,34 +265,44 @@ public class ItineraryServiceImpl implements ItineraryService {
                         )
                 );
 
-        List<ItineraryResponse> response = new ArrayList<>();
+        List<ItineraryResponse> response =
+                new ArrayList<>();
 
-        for (int i = 0; i < dayClusters.size(); i++) {
+        for (int i = 0;
+             i < clusters.size();
+             i++) {
 
             int currentDay = i + 1;
 
-            // 🔥 LOCKED DAYS RESPECT
-            if(trip.getLockedDays().contains(currentDay))
+            if(trip.getLockedDays()
+                    .contains(currentDay))
                 continue;
 
-            if (dislikedDays.contains(currentDay))
+            if(dislikedDays
+                    .contains(currentDay))
                 continue;
 
-            List<Place> optimized =
-                    ensureLatLngList(
-                            optimizeDayRoute(
-                                    dayClusters.get(i)
-                            )
-                    );
+            List<String> names =
+                    applyWeatherRules(
+                            clusters.get(i),
+                            weather
+                    ).stream()
+                            .map(Place::getName)
+                            .toList();
+
+            // 🔥 Create new REGENERATED version
+            createVersion(
+                    tripId,
+                    currentDay,
+                    names,
+                    80,
+                    "REGENERATED"
+            );
 
             response.add(
                     ItineraryResponse.builder()
                             .dayNumber(currentDay)
-                            .places(
-                                    optimized.stream()
-                                            .map(Place::getName)
-                                            .toList()
-                            )
+                            .places(names)
                             .reason("Regenerated based on feedback")
                             .confidenceScore(80)
                             .confidenceLabel("Good")
@@ -247,46 +313,52 @@ public class ItineraryServiceImpl implements ItineraryService {
         return response;
     }
 
-
     // =====================================================
-    // HELPERS (PREVIOUS — ALL PRESERVED)
+    // HELPERS
     // =====================================================
 
-    private List<Place> sortByPreference(List<Place> places, String travelStyle) {
+    private List<Place> sortByPreference(List<Place> places,
+                                         String style) {
+
+        if(style == null)
+            return places;
+
         return places.stream()
                 .sorted(
                         Comparator.comparingInt(
-                                p -> getPreferenceScore(p, travelStyle)
+                                p ->
+                                        resolvePreferenceScore(
+                                                p.getCategory(),
+                                                style
+                                        )
                         )
                 )
                 .toList();
     }
 
-    private int getPreferenceScore(Place place, String travelStyle) {
+    private int resolvePreferenceScore(String category,
+                                       String style){
 
-        String category =
-                place.getCategory() != null
-                        ? place.getCategory().toLowerCase()
+        String c =
+                category != null
+                        ? category.toLowerCase()
                         : "";
 
-        if (travelStyle == null) return 5;
+        return switch(style.toLowerCase()) {
 
-        return switch (travelStyle.toLowerCase()) {
-
-            case "relaxed" -> switch (category) {
+            case "relaxed" -> switch(c) {
                 case "beach" -> 1;
                 case "nature" -> 2;
                 case "market" -> 3;
-                case "monument" -> 4;
+                case "food" -> 4;
                 default -> 5;
             };
 
-            case "packed" -> switch (category) {
+            case "packed" -> switch(c) {
                 case "monument" -> 1;
                 case "market" -> 2;
                 case "food" -> 3;
-                case "beach" -> 4;
-                default -> 5;
+                default -> 4;
             };
 
             default -> 5;
@@ -295,7 +367,8 @@ public class ItineraryServiceImpl implements ItineraryService {
 
     private Place ensureLatLng(Place place) {
 
-        if (place.getLatitude() != null && place.getLongitude() != null) {
+        if (place.getLatitude() != null &&
+                place.getLongitude() != null) {
             return place;
         }
 
@@ -306,7 +379,8 @@ public class ItineraryServiceImpl implements ItineraryService {
                         place.getCountry()
                 );
 
-        if (latLng == null) return place;
+        if (latLng == null)
+            return place;
 
         place.setLatitude(latLng[0]);
         place.setLongitude(latLng[1]);
@@ -314,106 +388,82 @@ public class ItineraryServiceImpl implements ItineraryService {
         return placeRepository.save(place);
     }
 
-    private List<Place> orderPlacesByDistance(List<Place> places) {
-
-        List<Place> geoReady = places.stream()
-                .filter(p ->
-                        p.getLatitude() != null &&
-                                p.getLongitude() != null
-                )
-                .toList();
-
-        if (geoReady.size() <= 1) return places;
-
-        List<double[]> coords = geoReady.stream()
-                .map(p ->
-                        new double[]{
-                                p.getLongitude(),
-                                p.getLatitude()
-                        }
-                )
-                .toList();
-
-        double[][] matrix =
-                orsClient.getDistanceMatrix(coords);
-
-        boolean[] visited =
-                new boolean[geoReady.size()];
-
-        List<Place> ordered =
-                new ArrayList<>();
-
-        int current = 0;
-        visited[current] = true;
-        ordered.add(geoReady.get(current));
-
-        for (int step = 1; step < geoReady.size(); step++) {
-
-            double min = Double.MAX_VALUE;
-            int next = -1;
-
-            for (int i = 0; i < geoReady.size(); i++) {
-
-                if (!visited[i] &&
-                        matrix[current][i] < min) {
-
-                    min = matrix[current][i];
-                    next = i;
-                }
-            }
-
-            visited[next] = true;
-            ordered.add(geoReady.get(next));
-            current = next;
-        }
-
-        return ordered;
-    }
-
     private List<List<Place>> distributePlacesSmartly(
             List<Place> places,
-            int totalDays
+            int days
     ) {
 
-        List<List<Place>> result = new ArrayList<>();
+        List<List<Place>> result =
+                new ArrayList<>();
 
-        for (int i = 0; i < totalDays; i++) {
-            result.add(new ArrayList<>());
-        }
+        for(int i=0;i<days;i++)
+            result.add(
+                    new ArrayList<>()
+            );
 
-        for (int i = 0; i < places.size(); i++) {
-            result.get(i % totalDays).add(places.get(i));
+        for(int i=0;
+            i<places.size();
+            i++) {
+
+            result.get(i % days)
+                    .add(
+                            places.get(i)
+                    );
         }
 
         return result;
     }
 
-    private List<Place> optimizeDayRoute(List<Place> dayPlaces) {
+    private List<Place> applyWeatherRules(List<Place> list,
+                                          WeatherType weather){
+        return list;
+    }
+
+    private List<Place> optimizeDayRoute(List<Place> dayPlaces){
         return dayPlaces;
     }
 
-    private List<Place> applyWeatherRules(
-            List<Place> places,
-            WeatherType weather
-    ) {
-        return places;
-    }
-
-    private String buildReasonMessage(
-            WeatherType weather,
-            String travelStyle,
-            List<Place> dayPlaces
-    ) {
-        return "Generated using weather, distance, preferences, and real-world cost data.";
+    private String serialize(List<String> places){
+        try{
+            return mapper.writeValueAsString(places);
+        }catch(Exception e){
+            return "[]";
+        }
     }
 
     // =====================================================
-    // ADDITIONAL HELPER – NON BREAKING
+    // VERSION CREATE LOGIC
     // =====================================================
+    private void createVersion(UUID tripId,
+                               int day,
+                               List<String> names,
+                               int confidence,
+                               String source){
 
-    private List<Place> ensureLatLngList(List<Place> list){
-        return list.stream()
-                .map(this::ensureLatLng)
-                .toList();
+        ItineraryVersion top =
+                versionRepository.findTopByTripIdAndDayNumberOrderByVersionNumberDesc(
+                        tripId, day
+                );
+
+        int next =
+                top != null
+                        ? top.getVersionNumber() + 1
+                        : 1;
+
+        ItineraryVersion v =
+                ItineraryVersion.builder()
+                        .tripId(tripId)
+                        .dayNumber(day)
+                        .versionNumber(next)
+                        .placesJson(
+                                serialize(names)
+                        )
+                        .confidenceScore(confidence)
+                        .source(source)
+                        .createdAt(LocalDateTime.now())
+                        .build();
+
+        versionRepository.save(v);
     }
+
 }

@@ -1,11 +1,7 @@
 package com.reel2real.backend.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -14,15 +10,31 @@ import java.util.UUID;
 @Table(name = "itinerary_versions")
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class ItineraryVersion {
 
     @Id
     @GeneratedValue
     private UUID id;
 
+    @Column(nullable = false)
     private UUID tripId;
-    private int versionNumber;
-    private String reason;
+
+    @Column(nullable = false)
+    private Integer dayNumber;
+
+    @Column(nullable = false)
+    private Integer versionNumber;
+
+    @Column(length = 2000)
+    private String placesJson;   // serialized list
+
+    private Integer confidenceScore;
+
+    @Column(nullable = false)
+    private String source;       // ORIGINAL / REGENERATED
 
     private LocalDateTime createdAt;
 }

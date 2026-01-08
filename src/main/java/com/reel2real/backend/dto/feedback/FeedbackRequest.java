@@ -1,11 +1,13 @@
 package com.reel2real.backend.dto.feedback;
 
 import jakarta.validation.constraints.NotNull;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.UUID;
 
-@Data
+@Getter
+@Setter
 public class FeedbackRequest {
 
     @NotNull
@@ -14,10 +16,9 @@ public class FeedbackRequest {
     @NotNull
     private Integer dayNumber;
 
-    private UUID placeId; // optional
+    private UUID placeId;
 
-    @NotNull
-    private String feedbackType; // LIKE / DISLIKE
+    private String feedbackType = "DISLIKE";
 
     private String reason;
 }
