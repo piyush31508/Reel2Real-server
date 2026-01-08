@@ -17,6 +17,8 @@ public interface ItineraryVersionRepository extends JpaRepository<ItineraryVersi
     @Query("select max(v.versionNumber) from ItineraryVersion v where v.tripId = :tripId")
     Optional<Integer> findMaxVersion(UUID tripId);
 
+    Optional<ItineraryVersion> findTopByTripIdOrderByCreatedAtDesc(UUID tripId);
+
     ItineraryVersion findTopByTripIdAndDayNumberOrderByVersionNumberDesc(
             UUID tripId,
             Integer dayNumber

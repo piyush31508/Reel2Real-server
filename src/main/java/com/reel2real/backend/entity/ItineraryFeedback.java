@@ -1,10 +1,7 @@
 package com.reel2real.backend.entity;
 
 import jakarta.persistence.*;
-import lombok.Builder;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -12,9 +9,9 @@ import java.util.UUID;
 @Entity
 @Table(name = "itinerary_feedback")
 @Data
-@Getter
-@Setter
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ItineraryFeedback {
 
     @Id
@@ -22,17 +19,17 @@ public class ItineraryFeedback {
     private UUID id;
 
     @Column(nullable = false)
-    private UUID tripId;
+    private UUID itineraryVersionId;   // 🔥 NEW
 
     @Column(nullable = false)
     private Integer dayNumber;
 
-    private UUID placeId; // nullable
+    private UUID placeId; // nullable → whole day dislike
 
     @Column(nullable = false)
-    private String feedbackType; // LIKE / DISLIKE
+    private String feedbackType; // DISLIKE
 
     @Column(length = 500)
     private String reason;
-
 }
+

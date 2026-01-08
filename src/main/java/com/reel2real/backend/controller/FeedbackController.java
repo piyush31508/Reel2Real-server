@@ -2,7 +2,9 @@ package com.reel2real.backend.controller;
 
 import com.reel2real.backend.dto.feedback.FeedbackRequest;
 import com.reel2real.backend.entity.ItineraryFeedback;
+import com.reel2real.backend.entity.ItineraryVersion;
 import com.reel2real.backend.repository.ItineraryFeedbackRepository;
+import com.reel2real.backend.repository.ItineraryVersionRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,95 +20,95 @@ import java.util.UUID;
 public class FeedbackController {
 
     private final ItineraryFeedbackRepository feedbackRepository;
+    private final ItineraryVersionRepository versionRepository;
 
-    // =====================================================
-    //  DISLIKE PLACE
-    // =====================================================
     @PostMapping("/dislike-place")
     public ResponseEntity<Void> dislikePlace(
             @RequestBody @Valid FeedbackRequest request
     ) {
 
+        ItineraryVersion version =
+                versionRepository
+                        .findTopByTripIdOrderByCreatedAtDesc(
+                                request.getTripId()
+                        )
+                        .orElseThrow();
+
         boolean already =
-                feedbackRepository.existsByTripIdAndDayNumberAndFeedbackType(
-                        request.getTripId(),
-                        request.getDayNumber(),
-                        "DISLIKE"
-                );
+                feedbackRepository
+                        .existsByItineraryVersionIdAndDayNumberAndFeedbackType(
+                                version.getId(),
+                                request.getDayNumber(),
+                                "DISLIKE"
+                        );
 
         if (!already) {
-            ItineraryFeedback feedback =
-                    buildFeedback(request, true);
-
-            feedbackRepository.save(feedback);
-
+            feedbackRepository.save(
+                    buildFeedback(request, true, version.getId())
+            );
             return ResponseEntity.status(HttpStatus.CREATED).build();
         }
 
         return ResponseEntity.ok().build();
     }
 
-    // =====================================================
-    //  DISLIKE WHOLE DAY
-    // =====================================================
     @PostMapping("/dislike-day")
     public ResponseEntity<Void> dislikeDay(
             @RequestBody @Valid FeedbackRequest request
     ) {
 
-        ItineraryFeedback feedback =
-                buildFeedback(request, false);
+        ItineraryVersion version =
+                versionRepository
+                        .findTopByTripIdOrderByCreatedAtDesc(
+                                request.getTripId()
+                        )
+                        .orElseThrow();
 
-        // whole day dislike → placeId null
-        feedback.setPlaceId(null);
-
-        feedbackRepository.save(feedback);
+        feedbackRepository.save(
+                buildFeedback(request, false, version.getId())
+        );
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    // =====================================================
-    //  GET FEEDBACK OF TRIP
-    // =====================================================
     @GetMapping("/trip/{tripId}")
     public ResponseEntity<List<ItineraryFeedback>> get(
             @PathVariable UUID tripId
     ) {
 
-        List<ItineraryFeedback> list =
-                feedbackRepository.findByTripId(tripId);
+        ItineraryVersion version =
+                versionRepository
+                        .findTopByTripIdOrderByCreatedAtDesc(tripId)
+                        .orElseThrow();
 
-        return ResponseEntity.ok(list);
+        return ResponseEntity.ok(
+                feedbackRepository.findByItineraryVersionId(version.getId())
+        );
     }
 
-    // =====================================================
-    //  RESET FEEDBACK OF TRIP
-    // =====================================================
     @DeleteMapping("/reset/{tripId}")
     public ResponseEntity<Void> reset(
             @PathVariable UUID tripId
     ) {
 
-        feedbackRepository.deleteByTripId(tripId);
+        ItineraryVersion version =
+                versionRepository
+                        .findTopByTripIdOrderByCreatedAtDesc(tripId)
+                        .orElseThrow();
 
+        feedbackRepository.deleteByItineraryVersionId(version.getId());
         return ResponseEntity.ok().build();
     }
 
-    // =====================================================
-    //  HELPER – COMMON BUILDER
-    // =====================================================
     private ItineraryFeedback buildFeedback(
             FeedbackRequest request,
-            boolean isPlaceDislike
+            boolean isPlaceDislike,
+            UUID versionId
     ) {
         return ItineraryFeedback.builder()
-                .tripId(request.getTripId())
+                .itineraryVersionId(versionId)
                 .dayNumber(request.getDayNumber())
-                .placeId(
-                        isPlaceDislike
-                                ? request.getPlaceId()
-                                : null
-                )
+                .placeId(isPlaceDislike ? request.getPlaceId() : null)
                 .feedbackType("DISLIKE")
                 .reason(request.getReason())
                 .build();

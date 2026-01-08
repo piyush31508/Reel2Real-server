@@ -9,14 +9,13 @@ import java.util.UUID;
 public interface ItineraryFeedbackRepository
         extends JpaRepository<ItineraryFeedback, UUID> {
 
-    // ⭐ property names EXACT entity se match
-    boolean existsByTripIdAndDayNumberAndFeedbackType(
-            UUID tripId,
+    boolean existsByItineraryVersionIdAndDayNumberAndFeedbackType(
+            UUID itineraryVersionId,
             Integer dayNumber,
             String feedbackType
     );
 
-    List<ItineraryFeedback> findByTripId(UUID tripId);
+    List<ItineraryFeedback> findByItineraryVersionId(UUID itineraryVersionId);
 
-    void deleteByTripId(UUID tripId);
+    void deleteByItineraryVersionId(UUID itineraryVersionId);
 }

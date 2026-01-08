@@ -7,7 +7,12 @@ import lombok.Setter;
 import java.util.UUID;
 
 @Entity
-@Table(name = "itinerary_version_days")
+@Table(
+        name = "itinerary_version_days",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"itinerary_version_id", "day_number"})
+        }
+)
 @Getter
 @Setter
 public class ItineraryVersionDay {
@@ -16,11 +21,16 @@ public class ItineraryVersionDay {
     @GeneratedValue
     private UUID id;
 
+    @Column(name = "itinerary_version_id", nullable = false)
     private UUID itineraryVersionId;
+
+    @Column(name = "day_number", nullable = false)
     private int dayNumber;
 
     @Column(columnDefinition = "jsonb")
     private String placesJson;
 
-    private boolean locked;
+    @Column(nullable = false)
+    private boolean locked = false;
 }
+

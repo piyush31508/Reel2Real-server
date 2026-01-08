@@ -36,5 +36,8 @@ public class ItineraryVersion {
     @Column(nullable = false)
     private String source;       // ORIGINAL / REGENERATED
 
+    @Column(nullable = false)
+    private boolean active = true;
+
     private LocalDateTime createdAt;
 }
