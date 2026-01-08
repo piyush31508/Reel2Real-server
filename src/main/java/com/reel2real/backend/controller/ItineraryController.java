@@ -55,20 +55,22 @@ public class ItineraryController {
     // 🔥 PHASE 3 – NEW: Lock Day Endpoint
     // (ONLY ADDITION – prev code safe)
     // =====================================================
-    @PostMapping("/trip/{tripId}/lock-day/{dayNumber}")
-    public ResponseEntity<Void> lockDay(
+    @PostMapping("/trip/{tripId}/lock-day/{day}")
+    public ResponseEntity<Map<String, Object>> lockDay(
             @PathVariable UUID tripId,
-            @PathVariable int dayNumber
+            @PathVariable int day
     ) {
+        itineraryService.lockDay(tripId, day);
 
-        if (dayNumber <= 0) {
-            throw new IllegalArgumentException("Day number must be ≥ 1");
-        }
-
-        itineraryService.lockDay(tripId, dayNumber);
-
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(
+                Map.of(
+                        "message", "Day locked successfully",
+                        "tripId", tripId,
+                        "day", day
+                )
+        );
     }
+
 
     //Get All version
 

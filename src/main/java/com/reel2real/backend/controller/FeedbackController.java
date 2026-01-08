@@ -3,6 +3,7 @@ package com.reel2real.backend.controller;
 import com.reel2real.backend.dto.feedback.FeedbackRequest;
 import com.reel2real.backend.entity.ItineraryFeedback;
 import com.reel2real.backend.entity.ItineraryVersion;
+import com.reel2real.backend.exception.ResourceNotFoundException;
 import com.reel2real.backend.repository.ItineraryFeedbackRepository;
 import com.reel2real.backend.repository.ItineraryVersionRepository;
 import jakarta.validation.Valid;
@@ -32,7 +33,11 @@ public class FeedbackController {
                         .findTopByTripIdOrderByCreatedAtDesc(
                                 request.getTripId()
                         )
-                        .orElseThrow();
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "No itinerary found for this trip. Please generate an itinerary first."
+                                )
+                        );
 
         boolean already =
                 feedbackRepository
@@ -62,7 +67,11 @@ public class FeedbackController {
                         .findTopByTripIdOrderByCreatedAtDesc(
                                 request.getTripId()
                         )
-                        .orElseThrow();
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "No itinerary found for this trip. Please generate an itinerary first."
+                                )
+                        );
 
         feedbackRepository.save(
                 buildFeedback(request, false, version.getId())
@@ -79,7 +88,11 @@ public class FeedbackController {
         ItineraryVersion version =
                 versionRepository
                         .findTopByTripIdOrderByCreatedAtDesc(tripId)
-                        .orElseThrow();
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "No itinerary found for this trip"
+                                )
+                        );
 
         return ResponseEntity.ok(
                 feedbackRepository.findByItineraryVersionId(version.getId())
@@ -94,7 +107,11 @@ public class FeedbackController {
         ItineraryVersion version =
                 versionRepository
                         .findTopByTripIdOrderByCreatedAtDesc(tripId)
-                        .orElseThrow();
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "No itinerary found for this trip"
+                                )
+                        );
 
         feedbackRepository.deleteByItineraryVersionId(version.getId());
         return ResponseEntity.ok().build();

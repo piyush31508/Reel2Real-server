@@ -31,5 +31,10 @@ public class ItineraryFeedback {
 
     @Column(length = 500)
     private String reason;
+
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "trip_id", nullable = false)
+    private Trip trip;
+
 }
 

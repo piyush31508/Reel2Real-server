@@ -186,28 +186,38 @@ public class ItineraryServiceImpl implements ItineraryService {
     @Transactional
     public void lockDay(UUID tripId, int dayNumber) {
 
-        // 1️⃣ Get latest active version
-        ItineraryVersion version =
-                versionRepository
-                        .findTopByTripIdOrderByCreatedAtDesc(tripId)
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException("No itinerary version found")
-                        );
+        // 1️⃣ Validate input
+        if (dayNumber <= 0) {
+            throw new IllegalArgumentException("Day number must be ≥ 1");
+        }
 
-        // 2️⃣ Fetch version-day
-        ItineraryVersionDay day =
-                versionDayRepository
-                        .findByItineraryVersionIdAndDayNumber(
-                                version.getId(),
-                                dayNumber
-                        )
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException("Day not found in version")
-                        );
+        // 2️⃣ Get the trip
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Trip not found")
+                );
 
-        // 3️⃣ Lock it
-        day.setLocked(true);
-        versionDayRepository.save(day);
+        // 3️⃣ Add day to trip's locked days (PRIMARY LOCK)
+        trip.getLockedDays().add(dayNumber);
+        tripRepository.save(trip);
+
+        // 4️⃣ OPTIONAL: Also lock in version-day table if it exists
+        // This won't fail if the version-day doesn't exist
+        versionRepository
+                .findTopByTripIdOrderByCreatedAtDesc(tripId)
+                .ifPresent(version -> {
+                    versionDayRepository
+                            .findByItineraryVersionIdAndDayNumber(
+                                    version.getId(),
+                                    dayNumber
+                            )
+                            .ifPresent(day -> {
+                                day.setLocked(true);
+                                versionDayRepository.save(day);
+                            });
+                });
+
+        System.out.println("✅ Day " + dayNumber + " locked for trip " + tripId);
     }
 
 
