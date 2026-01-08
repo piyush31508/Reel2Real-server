@@ -5,10 +5,12 @@ import com.reel2real.backend.dto.reel.ReelCreateRequest;
 import com.reel2real.backend.dto.reel.ReelResponse;
 import com.reel2real.backend.entity.Place;
 import com.reel2real.backend.entity.Reel;
+import com.reel2real.backend.entity.Trip;
 import com.reel2real.backend.entity.User;
 import com.reel2real.backend.exception.ResourceNotFoundException;
 import com.reel2real.backend.repository.PlaceRepository;
 import com.reel2real.backend.repository.ReelRepository;
+import com.reel2real.backend.repository.TripRepository;
 import com.reel2real.backend.repository.UserRepository;
 import com.reel2real.backend.service.AiTaggingService;
 import com.reel2real.backend.service.ReelService;
@@ -27,29 +29,35 @@ import java.util.stream.Collectors;
 public class ReelServiceImpl implements ReelService {
 
     private final ReelRepository reelRepository;
-    private final UserRepository userRepository;
+    private final TripRepository tripRepository;
     private final PlaceRepository placeRepository;
     private final AiTaggingService aiTaggingService;
 
     @Override
-    public ReelResponse addReel(UUID userId, ReelCreateRequest request) {
+    public ReelResponse addReel(UUID tripId, ReelCreateRequest request) {
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Trip not found")
+                );
 
         AiTagResponse ai = hasAIInput(request)
-                ? aiTaggingService.analyze(request.getCaption(), request.getHashtags())
+                ? aiTaggingService.analyze(
+                request.getCaption(),
+                request.getHashtags()
+        )
                 : null;
 
-        String placeName = pick(request.getPlaceName(), ai != null ? ai.getPlaceName() : null);
-        String city = pick(request.getCity(), ai != null ? ai.getCity() : null);
-        String country = pick(request.getCountry(), ai != null ? ai.getCountry() : null);
-
-        Place place = resolvePlace(placeName, city, country, ai);
+        Place place = resolvePlace(
+                pick(request.getPlaceName(), ai != null ? ai.getPlaceName() : null),
+                pick(request.getCity(), ai != null ? ai.getCity() : null),
+                pick(request.getCountry(), ai != null ? ai.getCountry() : null),
+                ai
+        );
 
         Reel reel = reelRepository.save(
                 Reel.builder()
-                        .user(user)
+                        .trip(trip)
                         .reelUrl(request.getReelUrl())
                         .platform(request.getPlatform())
                         .notes(request.getNotes())
@@ -61,18 +69,22 @@ public class ReelServiceImpl implements ReelService {
         return mapToResponse(reel);
     }
 
+
     @Override
     @Transactional(readOnly = true)
-    public List<ReelResponse> getReelsForUser(UUID userId) {
+    public List<ReelResponse> getReelsForTrip(UUID tripId) {
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Trip not found")
+                );
 
-        return reelRepository.findByUser(user)
+        return reelRepository.findByTrip(trip)
                 .stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
+
 
     private Place resolvePlace(
             String name, String city, String country, AiTagResponse ai
@@ -114,10 +126,12 @@ public class ReelServiceImpl implements ReelService {
     }
 
     private ReelResponse mapToResponse(Reel r) {
+        Place p = r.getPlace();
         return ReelResponse.builder()
                 .id(r.getId())
                 .reelUrl(r.getReelUrl())
                 .platform(r.getPlatform())
+                .placeId(p != null ? p.getId() : null)
                 .notes(r.getNotes())
                 .placeName(r.getPlace() != null ? r.getPlace().getName() : null)
                 .country(r.getPlace() != null ? r.getPlace().getCountry() : null)

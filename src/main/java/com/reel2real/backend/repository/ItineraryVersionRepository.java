@@ -14,6 +14,20 @@ public interface ItineraryVersionRepository extends JpaRepository<ItineraryVersi
 
     List<ItineraryVersion> findByTripIdOrderByCreatedAtDesc(UUID tripId);
 
+    @Query("""
+select v from ItineraryVersion v
+where v.tripId = :tripId
+and v.versionNumber = (
+    select max(v2.versionNumber)
+    from ItineraryVersion v2
+    where v2.tripId = v.tripId
+    and v2.dayNumber = v.dayNumber
+)
+order by v.dayNumber
+""")
+    List<ItineraryVersion> findLatestVersionsPerDay(UUID tripId);
+
+
     @Query("select max(v.versionNumber) from ItineraryVersion v where v.tripId = :tripId")
     Optional<Integer> findMaxVersion(UUID tripId);
 

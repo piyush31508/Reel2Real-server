@@ -27,7 +27,7 @@ public class ItineraryVersionDay {
     @Column(name = "day_number", nullable = false)
     private int dayNumber;
 
-    @Column(columnDefinition = "jsonb")
+    @Column(name = "places", nullable = false)
     private String placesJson;
 
     @Column(nullable = false)

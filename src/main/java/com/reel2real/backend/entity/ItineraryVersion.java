@@ -28,8 +28,8 @@ public class ItineraryVersion {
     @Column(nullable = false)
     private Integer versionNumber;
 
-    @Column(length = 2000)
-    private String placesJson;   // serialized list
+    @Column(name = "places_json", nullable = false)
+    private String placesJson;         // serialized list
 
     private Integer confidenceScore;
 

@@ -551,6 +551,7 @@ public class ItineraryServiceImpl implements ItineraryService {
                         .placesJson(serialize(names))
                         .confidenceScore(confidence)
                         .source(source)
+                        .active(true)
                         .createdAt(LocalDateTime.now())
                         .build();
 

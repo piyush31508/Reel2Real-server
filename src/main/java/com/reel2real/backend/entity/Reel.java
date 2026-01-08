@@ -19,8 +19,9 @@ public class Reel {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @JoinColumn(name = "trip_id", nullable = false)
+    private Trip trip;
+
 
     @Column(name = "reel_url", nullable = false)
     private String reelUrl;

@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface ReelService {
 
-    ReelResponse addReel(UUID userId, ReelCreateRequest request);
+    ReelResponse addReel(UUID tripId, ReelCreateRequest request);
 
-    List<ReelResponse> getReelsForUser(UUID userId);
+    List<ReelResponse> getReelsForTrip(UUID userId);
 }

@@ -19,23 +19,24 @@ public class ReelController {
 
     private final ReelService reelService;
 
-    @PostMapping("/user/{userId}")
+    @PostMapping("/trip/{tripId}")
     public ResponseEntity<ReelResponse> addReel(
-            @PathVariable UUID userId,
+            @PathVariable UUID tripId,
             @Valid @RequestBody ReelCreateRequest request
     ) {
         return new ResponseEntity<>(
-                reelService.addReel(userId, request),
+                reelService.addReel(tripId, request),
                 HttpStatus.CREATED
         );
     }
 
-    @GetMapping("/user/{userId}")
+    @GetMapping("/trip/{tripId}")
     public ResponseEntity<List<ReelResponse>> getReels(
-            @PathVariable UUID userId
+            @PathVariable UUID tripId
     ) {
         return ResponseEntity.ok(
-                reelService.getReelsForUser(userId)
+                reelService.getReelsForTrip(tripId)
         );
     }
+
 }

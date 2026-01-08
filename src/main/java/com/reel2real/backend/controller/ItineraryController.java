@@ -77,9 +77,10 @@ public class ItineraryController {
             @PathVariable UUID tripId
     ) {
         return ResponseEntity.ok(
-                versionRepository.findByTripIdOrderByCreatedAtDesc(tripId)
+                versionRepository.findLatestVersionsPerDay(tripId)
         );
     }
+
 
     // COMPARE 2 VERSIONS
     // -------------------------------
@@ -138,33 +139,7 @@ public class ItineraryController {
     // HELPER – SAVE VERSION LOGIC
     // ==================================================
 
-    private void saveVersionBatch(
-            UUID tripId,
-            List<ItineraryResponse> list,
-            String source
-    ) {
 
-        for (ItineraryResponse r : list) {
-
-            int nextVersion =
-                    resolveNextVersion(tripId, r.getDayNumber());
-
-            ItineraryVersion version =
-                    ItineraryVersion.builder()
-                            .tripId(tripId)
-                            .dayNumber(r.getDayNumber())
-                            .versionNumber(nextVersion)
-                            .placesJson(
-                                    serialize(r.getPlaces())
-                            )
-                            .confidenceScore(r.getConfidenceScore())
-                            .source(source)
-                            .createdAt(LocalDateTime.now())
-                            .build();
-
-            versionRepository.save(version);
-        }
-    }
 
     private int resolveNextVersion(
             UUID tripId,
