@@ -3,9 +3,11 @@ package com.reel2real.backend.controller;
 import com.reel2real.backend.dto.feedback.FeedbackRequest;
 import com.reel2real.backend.entity.ItineraryFeedback;
 import com.reel2real.backend.entity.ItineraryVersion;
+import com.reel2real.backend.entity.Trip;
 import com.reel2real.backend.exception.ResourceNotFoundException;
 import com.reel2real.backend.repository.ItineraryFeedbackRepository;
 import com.reel2real.backend.repository.ItineraryVersionRepository;
+import com.reel2real.backend.repository.TripRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,39 +24,31 @@ public class FeedbackController {
 
     private final ItineraryFeedbackRepository feedbackRepository;
     private final ItineraryVersionRepository versionRepository;
+    private final TripRepository tripRepository;
 
     @PostMapping("/dislike-place")
-    public ResponseEntity<Void> dislikePlace(
-            @RequestBody @Valid FeedbackRequest request
-    ) {
+    public ResponseEntity<Void> dislikePlace(@RequestBody @Valid FeedbackRequest request) {
+        // 1. Get the latest version
+        ItineraryVersion version = versionRepository
+                .findTopByTripIdOrderByCreatedAtDesc(request.getTripId())
+                .orElseThrow(() -> new ResourceNotFoundException("No itinerary found"));
 
-        ItineraryVersion version =
-                versionRepository
-                        .findTopByTripIdOrderByCreatedAtDesc(
-                                request.getTripId()
-                        )
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "No itinerary found for this trip. Please generate an itinerary first."
-                                )
-                        );
+        // 2. FETCH THE TRIP (Missing in your current code)
+        Trip trip = tripRepository.findById(request.getTripId())
+                .orElseThrow(() -> new ResourceNotFoundException("Trip not found"));
 
-        boolean already =
-                feedbackRepository
-                        .existsByItineraryVersionIdAndDayNumberAndFeedbackType(
-                                version.getId(),
-                                request.getDayNumber(),
-                                "DISLIKE"
-                        );
-
-        if (!already) {
-            feedbackRepository.save(
-                    buildFeedback(request, true, version.getId())
-            );
-            return ResponseEntity.status(HttpStatus.CREATED).build();
-        }
-
-        return ResponseEntity.ok().build();
+        // 3. Save with the Trip object
+        feedbackRepository.save(
+                ItineraryFeedback.builder()
+                        .itineraryVersionId(version.getId())
+                        .dayNumber(request.getDayNumber())
+                        .placeId(request.getPlaceId())
+                        .feedbackType("DISLIKE")
+                        .reason(request.getReason())
+                        .trip(trip) // <--- CRITICAL FIX
+                        .build()
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     @PostMapping("/dislike-day")
