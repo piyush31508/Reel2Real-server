@@ -6,7 +6,6 @@ target/
 
 # Environment & config files
 .env
-*.properties
 *.yaml
 *.yml
 
