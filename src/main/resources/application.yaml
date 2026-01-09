@@ -8,13 +8,21 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 0
+      idle-timeout: 30000
+      max-lifetime: 600000
+      connection-timeout: 20000
+
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none   # 🔥 VERY IMPORTANT
     show-sql: true
     open-in-view: false
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
 
 server:
@@ -29,12 +37,5 @@ nominatim:
   url: https://nominatim.openstreetmap.org
 
 budget:
-   ml:
-     base-url: https://budget-api-n62a.onrender.com
-
-     hikari:
-       maximum-pool-size: 1
-       minimum-idle: 1
-       idle-timeout: 30000
-       max-lifetime: 60000
-       connection-timeout: 30000
+  ml:
+    base-url: https://budget-api-n62a.onrender.com
