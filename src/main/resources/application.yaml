@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: reel2real-backend
+
+  datasource:
+    url: jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:5432/postgres
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+server:
+  port: 8000
+
+ors:
+  api:
+    key: ${ORS_API_KEY}
+    url: https://api.openrouteservice.org
+
+nominatim:
+  url: https://nominatim.openstreetmap.org
+
+budget:
+   ml:
+     base-url: https://budget-api-n62a.onrender.com
+
+     hikari:
+       maximum-pool-size: 1
+       minimum-idle: 1
+       idle-timeout: 30000
+       max-lifetime: 60000
+       connection-timeout: 30000

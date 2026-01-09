@@ -1,0 +1,34 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: reel2real-db
+    env: docker
+    plan: free
+    region: oregon
+    databases:
+      - name: reel2real
+        user: reel2real_user
+
+  # Spring Boot Application
+  - type: web
+    name: reel2real-backend
+    env: docker
+    region: oregon
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reel2real-db
+          property: connectionString
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: WEATHER_API_KEY
+        sync: false
+      - key: ORS_API_KEY
+        sync: false
+      - key: BUDGET_ML_BASE_URL
+        value: http://your-ml-service-url
+      - key: JAVA_OPTS
+        value: -Xmx512m -Dserver.port=$PORT

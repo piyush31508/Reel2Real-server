@@ -6,8 +6,8 @@ target/
 
 # Environment & config files
 .env
-*.yaml
-*.yml
+
+
 
 ### STS ###
 .apt_generated
